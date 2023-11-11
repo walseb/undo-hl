@@ -86,7 +86,6 @@ changes that often obstruct the real edit. Keep it at least 2."
 This is to be called from ‘after-change-functions’, see its doc
 for BEG, END and LEN."
   (when (and (memq this-command undo-hl-undo-commands)
-             ;; (eq len 0)
              (>= (- end beg) undo-hl-mininum-edit-size))
     ;; This makes sure all edits are highlighted
     ;; (run-with-timer nil nil
@@ -96,7 +95,7 @@ for BEG, END and LEN."
     ;;                              (delete-overlay ov))))
     (let ((ov (make-overlay beg end)))
       (overlay-put ov 'face 'undo-hl-insert)
-      (overlay-put ov 'priority 999)
+      (overlay-put ov 'priority 98)
       (push ov undo-hl-ov))))
 
 (defun undo-hl--before-change (beg end)
@@ -105,10 +104,11 @@ This is to be called from ‘before-change-functions’, see its doc
 for BEG and END."
   (when (and (memq this-command undo-hl-undo-commands)
              (>= (- end beg) undo-hl-mininum-edit-size))
-    (let ((ov (make-overlay beg beg)))
+    (let* ((pos (+ 1 beg))
+           (ov (make-overlay pos pos)))
       (overlay-put ov 'face 'undo-hl-delete)
-      (overlay-put ov 'priority 999)
-      (overlay-put ov 'before-string (propertize (buffer-substring-no-properties beg end) 'face 'undo-hl-delete))
+      (overlay-put ov 'priority 99)
+      (overlay-put ov 'after-string (propertize (buffer-substring-no-properties beg end) 'face 'undo-hl-delete))
       (push ov undo-hl-ov))))
 
 (defun undo-hl--wait (&optional _)
