@@ -46,6 +46,8 @@
   "Custom group for undo-hl."
   :group 'undo)
 
+(defvar undo-hl-ov nil)
+
 (defface undo-hl-delete '((t . (:inherit diff-refine-removed)))
   "Face used for highlighting the deleted text.")
 
@@ -87,24 +89,33 @@ for BEG, END and LEN."
              ;; (eq len 0)
              (>= (- end beg) undo-hl-mininum-edit-size))
     ;; This makes sure all edits are highlighted
-    (run-with-timer nil nil
-                    (lambda () (let ((ov (make-overlay beg end)))
-                                         (overlay-put ov 'face 'undo-hl-insert)
-                                         (sit-for undo-hl-wait-duration)
-                                         (delete-overlay ov))))))
+    ;; (run-with-timer nil nil
+    ;;                 (lambda () (let ((ov (make-overlay beg end)))
+    ;;                              (overlay-put ov 'face 'undo-hl-insert)
+    ;;                              (sit-for undo-hl-wait-duration)
+    ;;                              (delete-overlay ov))))
+    (let ((ov (make-overlay beg end)))
+      (overlay-put ov 'face 'undo-hl-insert)
+      (overlay-put ov 'priority 999)
+      (push ov undo-hl-ov))))
 
 (defun undo-hl--before-change (beg end)
   "Highlight the to-be-deleted region before an undo.
 This is to be called from ‘before-change-functions’, see its doc
 for BEG and END."
   (when (and (memq this-command undo-hl-undo-commands)
-             (not (eq beg end))
              (>= (- end beg) undo-hl-mininum-edit-size))
-    (let ((ov (make-overlay beg end)))
+    (let ((ov (make-overlay beg beg)))
       (overlay-put ov 'face 'undo-hl-delete)
-      ;; Sit-for automatically redisplays.
-      (sit-for undo-hl-wait-duration)
-      (delete-overlay ov))))
+      (overlay-put ov 'priority 999)
+      (overlay-put ov 'before-string (propertize (buffer-substring-no-properties beg end) 'face 'undo-hl-delete))
+      (push ov undo-hl-ov))))
+
+(defun undo-hl--wait (&optional _)
+  (when undo-hl-ov
+    (sit-for undo-hl-wait-duration)
+    (mapc 'delete-overlay undo-hl-ov)
+    (setq undo-hl-ov nil)))
 
 ;;;###autoload
 (define-minor-mode undo-hl-mode
@@ -116,9 +127,11 @@ I recommend only enabling this for text-editing modes."
       (progn
         (add-hook 'before-change-functions #'undo-hl--before-change -50 t)
         (add-hook 'after-change-functions #'undo-hl--after-change -50 t)
-        )
+        (add-hook 'post-command-hook #'undo-hl--wait -49 t))
     (remove-hook 'before-change-functions #'undo-hl--before-change t)
-    (remove-hook 'after-change-functions #'undo-hl--after-change t)))
+    (remove-hook 'after-change-functions #'undo-hl--after-change t)
+    (remove-hook 'post-command-hook #'undo-hl--wait t)
+    ))
 
 (provide 'undo-hl)
 
