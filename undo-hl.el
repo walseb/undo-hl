@@ -64,35 +64,13 @@ Undo-hl only run before and after undo commands."
 Note that insertion highlight is not affected by this option."
   :type 'number)
 
-(defcustom undo-hl-mininum-edit-size 2
-  "Modifications smaller than this size is ignored.
-This is a useful heuristic that avoids small text property
-changes that often obstruct the real edit. Keep it at least 2."
-  ;; How does text property change obstruct highlighting the real
-  ;; edit: First, we only highlight one change every command loop;
-  ;; second, a single undo could make multiple changes, including
-  ;; moving point, changing text property, inserting/deleting text.
-  ;; Both text prop change and ins/del invokes
-  ;; ‘after/before-change-functions’, so if there is a text prop edit
-  ;; before the real text edit in the undo history, undo-hl will
-  ;; highlight the text prop change (often of size 1 at EOL) and
-  ;; ignore the following text change. A simple check of size
-  ;; eliminates most of such problems caused by both jit-lock and
-  ;; ws-bulter.
-  :type 'integer)
-
 (defun undo-hl--after-change (beg end len)
   "Highlight the inserted region after an undo.
 This is to be called from ‘after-change-functions’, see its doc
 for BEG, END and LEN."
   (when (and (memq this-command undo-hl-undo-commands)
-             (>= (- end beg) undo-hl-mininum-edit-size))
-    ;; This makes sure all edits are highlighted
-    ;; (run-with-timer nil nil
-    ;;                 (lambda () (let ((ov (make-overlay beg end)))
-    ;;                              (overlay-put ov 'face 'undo-hl-insert)
-    ;;                              (sit-for undo-hl-wait-duration)
-    ;;                              (delete-overlay ov))))
+             ;; If beg and end is equal, it's an insertion
+             (= len 0))
     (let ((ov (make-overlay beg end)))
       (overlay-put ov 'face 'undo-hl-insert)
       (overlay-put ov 'priority 98)
@@ -103,15 +81,19 @@ for BEG, END and LEN."
 This is to be called from ‘before-change-functions’, see its doc
 for BEG and END."
   (when (and (memq this-command undo-hl-undo-commands)
-             (>= (- end beg) undo-hl-mininum-edit-size))
-    (let* ((pos (+ 1 beg))
-           (ov (make-overlay pos pos)))
+             (not (= end beg)))
+    (let* ((pos (if (save-excursion
+                      (goto-char beg)
+                      (eolp))
+                    (+ 5 beg)
+                  beg))
+           (ov (make-overlay beg beg)))
       (overlay-put ov 'face 'undo-hl-delete)
       (overlay-put ov 'priority 99)
       (overlay-put ov 'after-string (propertize (buffer-substring-no-properties beg end) 'face 'undo-hl-delete))
       (push ov undo-hl-ov))))
 
-(defun undo-hl--wait (&optional _)
+(defun undo-hl--wait ()
   (when undo-hl-ov
     (sit-for undo-hl-wait-duration)
     (mapc 'delete-overlay undo-hl-ov)
@@ -130,8 +112,7 @@ I recommend only enabling this for text-editing modes."
         (add-hook 'post-command-hook #'undo-hl--wait -49 t))
     (remove-hook 'before-change-functions #'undo-hl--before-change t)
     (remove-hook 'after-change-functions #'undo-hl--after-change t)
-    (remove-hook 'post-command-hook #'undo-hl--wait t)
-    ))
+    (remove-hook 'post-command-hook #'undo-hl--wait t)))
 
 (provide 'undo-hl)
 
