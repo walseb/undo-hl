@@ -48,6 +48,12 @@
 
 (defvar undo-hl-ov nil)
 
+(defcustom undo-hl-max-draw-limit 10000
+  "How many chars undo-hl should highlight before giving up. Useful for massive edits that create thousands of overlays that would otherwise freeze Emacs."
+  :type 'number)
+
+(defvar undo-hl-max-draw-curr 0)
+
 (defface undo-hl-delete '((t . (:inherit diff-refine-removed)))
   "Face used for highlighting the deleted text.")
 
@@ -68,9 +74,13 @@ Note that insertion highlight is not affected by this option."
   "Highlight the inserted region after an undo.
 This is to be called from ‘after-change-functions’, see its doc
 for BEG, END and LEN."
-  (when (and (memq this-command undo-hl-undo-commands)
-             ;; If beg and end is equal, it's an insertion
-             (= len 0))
+  (setq undo-hl-max-draw-curr (+ undo-hl-max-draw-curr (- end beg)))
+
+  (when (and
+         (< undo-hl-max-draw-curr undo-hl-max-draw-limit)
+         (memq this-command undo-hl-undo-commands)
+         ;; If beg and end is equal, it's an insertion
+         (= len 0))
     (let ((ov (make-overlay beg end)))
       (overlay-put ov 'face 'undo-hl-insert)
       (overlay-put ov 'priority 98)
@@ -80,12 +90,16 @@ for BEG, END and LEN."
   "Highlight the to-be-deleted region before an undo.
 This is to be called from ‘before-change-functions’, see its doc
 for BEG and END."
-  (when (and (memq this-command undo-hl-undo-commands)
-             (not (= end beg)))
+  (setq undo-hl-max-draw-curr (+ undo-hl-max-draw-curr (- end beg)))
+
+  (when (and
+         (< undo-hl-max-draw-curr undo-hl-max-draw-limit)
+         (memq this-command undo-hl-undo-commands)
+         (not (= end beg)))
     (let* ((pos (if (save-excursion
                       (goto-char beg)
                       (eolp))
-                    (+ 5 beg)
+                    (+ 1 beg)
                   beg))
            (ov (make-overlay beg beg)))
       (overlay-put ov 'face 'undo-hl-delete)
@@ -94,6 +108,7 @@ for BEG and END."
       (push ov undo-hl-ov))))
 
 (defun undo-hl--wait ()
+  (setq undo-hl-max-draw-curr 0)
   (when undo-hl-ov
     (sit-for undo-hl-wait-duration)
     (mapc 'delete-overlay undo-hl-ov)
